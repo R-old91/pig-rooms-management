@@ -20,8 +20,15 @@ with st.sidebar:
     st.subheader("Configuration générale")
     VIDE_SANITAIRE = st.number_input("Vide sanitaire (jours)", value=7, min_value=0, max_value=14,
                                      help="Durée obligatoire de vide sanitaire entre deux bandes")
-    NB_BANDES = st.number_input("Nombre de bandes", value=7, min_value=1, max_value=20)
-    INTERVALLE_BANDES = st.number_input("Intervalle entre bandes (jours)", value=21, min_value=1)
+    
+    INTERVALLE_BANDES = st.number_input("Intervalle entre bandes (jours)", value=21, min_value=1,
+                                       help="Nombre de jours entre l'entrée de deux bandes successives")
+    
+    # Calcul automatique du nombre de bandes
+    nb_bandes_calcule = round(147 / INTERVALLE_BANDES)
+    
+    NB_BANDES = st.number_input("Nombre de bandes", value=nb_bandes_calcule, min_value=1, 
+                               help=f"Calculé automatiquement : 147j / {INTERVALLE_BANDES}j = {nb_bandes_calcule} bandes")
     
     # Date de référence = DATE DE SAILLIE de B1
     st.subheader("Date de référence")
