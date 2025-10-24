@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Gestion Salles Élevage Porcin", layout="wide")
 
-st.title("🐷 Visualisation des Salles d'Élevage Porcin")
+st.title("🐷 Gestion des bandes en élevage Porcin")
 
 
 with st.sidebar:
@@ -70,7 +70,7 @@ with st.sidebar:
     # ========================================================================
     
     DUREE_AS_FIXE = 35      # Fixe
-    DUREE_PS_FIXE = 42      # Fixe
+    DUREE_PS_FIXE = 35      # Fixe
     DUREE_M_VISEE = 35      # Cible (flexible 32-35j)
     
     # ========================================================================
@@ -801,7 +801,7 @@ with st.expander("📊 Diagnostic de la configuration", expanded=True):
         'AS': '🔒 35j fixe',
         'G': '🔄 Variable',
         'M': '🟡 32-35j',
-        'PS': '🔒 42j fixe',
+        'PS': '🔒 35j fixe',
         'E': '🔄 Variable'
     }
     
