@@ -12,97 +12,284 @@ st.set_page_config(page_title="Gestion Salles Élevage Porcin", layout="wide")
 st.title("🐷 Visualisation des Salles d'Élevage Porcin")
 
 
-# Sidebar pour les paramètres
 with st.sidebar:
     st.header("⚙️ Paramètres de conduite")
     
-    # Paramètres généraux
-    st.subheader("Configuration générale")
-    VIDE_SANITAIRE = st.number_input("Vide sanitaire (jours)", value=7, min_value=0, max_value=14,
-                                     help="Durée obligatoire de vide sanitaire entre deux bandes")
+    # ========================================================================
+    # SECTION 1 : PARAMÈTRES PRINCIPAUX
+    # ========================================================================
     
-    INTERVALLE_BANDES = st.number_input("Intervalle entre bandes (jours)", value=21, min_value=1,
-                                       help="Nombre de jours entre l'entrée de deux bandes successives")
+    st.subheader("Configuration principale")
     
-    # Calcul automatique du nombre de bandes
-    nb_bandes_calcule = round(147 / INTERVALLE_BANDES)
+    INTERVALLE_BANDES = st.selectbox(
+        "Intervalle entre bandes",
+        options=[7, 14, 21, 28, 35],
+        index=2,
+        format_func=lambda x: f"{x} jours",
+        help="Nombre de jours entre l'entrée de deux bandes successives"
+    )
     
-    NB_BANDES = st.number_input("Nombre de bandes", value=nb_bandes_calcule, min_value=1, 
-                               help=f"Calculé automatiquement : 147j / {INTERVALLE_BANDES}j = {nb_bandes_calcule} bandes")
+    VIDE_SANITAIRE = st.slider(
+        "Vide sanitaire",
+        min_value=3,
+        max_value=7,
+        value=5,
+        help="Durée de nettoyage entre deux bandes (entre 3 et 7 jours recommandé)"
+    )
     
-    # Date de référence = DATE DE SAILLIE de B1
-    st.subheader("Date de référence")
+    # ========================================================================
+    # RÉINITIALISATION si les paramètres principaux changent
+    # ========================================================================
+    
+    suffixe_config = f"_I{INTERVALLE_BANDES}_V{VIDE_SANITAIRE}"
+    
+    # Date de référence
     DATE_SAILLIE_B1 = st.date_input(
         "Date de SAILLIE de la Bande 1",
-        value=datetime(2025, 7, 25)
+        value=datetime(2025, 7, 25),
+        help="Point de référence temporel pour la simulation"
     )
     
     st.markdown("---")
+    # ========================================================================
+    # SECTION 2 : CALCULS AUTOMATIQUES SIMPLIFIÉS
+    # ========================================================================
     
-    # Durées d'occupation - TRUIES
-    st.subheader("🐖 Circuit Truies")
-    st.info("⚠️ Cycle = 147 jours à partir de la saillie")
-    
-    JOURS_AVANT_SAILLIE = st.number_input("Jours avant saillie en AS", value=5, min_value=0)
-    DUREE_ATTENTE_SAILLIE = st.number_input("Attente Saillie (total)", value=35, min_value=1)
-    DUREE_GESTANTE = st.number_input("Gestante", value=77, min_value=1)
-    DUREE_MATERNITE = st.number_input("Maternité", value=35, min_value=1)
-    
-    # Validation du cycle truie
-    CYCLE_TRUIE_TOTAL = DUREE_ATTENTE_SAILLIE + DUREE_GESTANTE + DUREE_MATERNITE
-    CYCLE_TRUIE_ATTENDU = 147
-    
-    if CYCLE_TRUIE_TOTAL != CYCLE_TRUIE_ATTENDU:
-        st.error(f"⚠️ ALERTE : AS + G + M = {CYCLE_TRUIE_TOTAL}j ≠ {CYCLE_TRUIE_ATTENDU}j !")
-        st.warning(f"Le cycle doit être exactement {CYCLE_TRUIE_ATTENDU} jours")
-    else:
-        st.success(f"✅ Cycle truie = {CYCLE_TRUIE_TOTAL} jours")
-    
-    # Durées d'occupation - PRODUITS
-    st.subheader("🐷 Circuit Produits")
-    st.info("⚠️ PS + E ne doit pas dépasser 152 jours")
-    
-    DUREE_POST_SEVRAGE = st.number_input("Post-Sevrage", value=35, min_value=1)
-    DUREE_ENGRAISSEMENT = st.number_input("Engraissement", value=119, min_value=1)
-    
-    # Validation du circuit produits
-    CIRCUIT_PRODUITS_TOTAL = DUREE_POST_SEVRAGE + DUREE_ENGRAISSEMENT
-    CIRCUIT_PRODUITS_MAX = 152
-    
-    if CIRCUIT_PRODUITS_TOTAL > CIRCUIT_PRODUITS_MAX:
-        st.error(f"⚠️ ALERTE : PS + E = {CIRCUIT_PRODUITS_TOTAL}j > {CIRCUIT_PRODUITS_MAX}j !")
-    else:
-        st.success(f"✅ Circuit produits = {CIRCUIT_PRODUITS_TOTAL} jours")
-    
-    st.markdown("---")
-    
-    # Calcul du dimensionnement optimal
-    st.subheader("📊 Dimensionnement optimal")
-    st.caption(f"Avec vide sanitaire de {VIDE_SANITAIRE}j")
+    st.subheader("🤖 Calculs automatiques")
     
     import math
+    
+    # Calcul du nombre de bandes
+    nb_bandes_calcule = round(147 / INTERVALLE_BANDES)
+    NB_BANDES = nb_bandes_calcule
+    
+    st.info(f"**Nombre de bandes :** {NB_BANDES} bandes")
+    
+    # ========================================================================
+    # CONTRAINTES PHYSIOLOGIQUES
+    # ========================================================================
+    
+    DUREE_AS_FIXE = 35      # Fixe
+    DUREE_PS_FIXE = 42      # Fixe
+    DUREE_M_VISEE = 35      # Cible (flexible 32-35j)
+    
+    # ========================================================================
+    # CALCUL DIRECT : Nb salles + vide résultant
+    # ========================================================================
+    
+    # 1. Attente Saillie (35j fixe)
+    nb_salles_as = math.ceil((DUREE_AS_FIXE + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+    vide_as = (nb_salles_as * INTERVALLE_BANDES) - DUREE_AS_FIXE
+    duree_as_finale = DUREE_AS_FIXE
+    
+    # 2. Post-Sevrage (42j fixe)
+    nb_salles_ps = math.ceil((DUREE_PS_FIXE + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+    vide_ps = (nb_salles_ps * INTERVALLE_BANDES) - DUREE_PS_FIXE
+    duree_ps_finale = DUREE_PS_FIXE
+    
+    # 3. Maternité (vise 35j)
+    nb_salles_m = math.ceil((DUREE_M_VISEE + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+    # On calcule d'abord le vide possible avec ce nombre de salles
+    vide_m_brut = (nb_salles_m * INTERVALLE_BANDES) - DUREE_M_VISEE
+    
+    # 4. Gestante (ajustée pour cycle 147j)
+    # On part d'une estimation puis on ajuste Maternité pour boucler
+    duree_g_estimee = 147 - DUREE_AS_FIXE - DUREE_M_VISEE
+    nb_salles_g = math.ceil((duree_g_estimee + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+    vide_g = (nb_salles_g * INTERVALLE_BANDES) - duree_g_estimee
+    
+    # Ajustement de Maternité pour cycle exact de 147j
+    duree_m_finale = 147 - DUREE_AS_FIXE - duree_g_estimee
+    
+    # Si Maternité sort des limites 32-35j, on ajuste Gestante
+    if duree_m_finale < 32:
+        duree_m_finale = 32
+        duree_g_finale = 147 - DUREE_AS_FIXE - duree_m_finale
+        # Recalculer nb salles Gestante
+        nb_salles_g = math.ceil((duree_g_finale + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+        vide_g = (nb_salles_g * INTERVALLE_BANDES) - duree_g_finale
+        # Re-ajuster Maternité
+        duree_m_finale = 147 - DUREE_AS_FIXE - duree_g_finale
+    elif duree_m_finale > 35:
+        duree_m_finale = 35
+        duree_g_finale = 147 - DUREE_AS_FIXE - duree_m_finale
+        nb_salles_g = math.ceil((duree_g_finale + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+        vide_g = (nb_salles_g * INTERVALLE_BANDES) - duree_g_finale
+        duree_m_finale = 147 - DUREE_AS_FIXE - duree_g_finale
+    else:
+        duree_g_finale = duree_g_estimee
+    
+    vide_m = (nb_salles_m * INTERVALLE_BANDES) - duree_m_finale
+    
+    # 5. Engraissement (max 152 - PS)
+    duree_e_max = 152 - DUREE_PS_FIXE
+    nb_salles_e = math.ceil((duree_e_max + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+    duree_e_finale = min((nb_salles_e * INTERVALLE_BANDES) - VIDE_SANITAIRE, duree_e_max)
+    vide_e = (nb_salles_e * INTERVALLE_BANDES) - duree_e_finale
+    
+    # ========================================================================
+    # STOCKAGE DES RÉSULTATS
+    # ========================================================================
+    
     nb_optimal = {
-        'AS': math.ceil((DUREE_ATTENTE_SAILLIE + VIDE_SANITAIRE) / INTERVALLE_BANDES),
-        'G': math.ceil((DUREE_GESTANTE + VIDE_SANITAIRE) / INTERVALLE_BANDES),
-        'M': math.ceil((DUREE_MATERNITE + VIDE_SANITAIRE) / INTERVALLE_BANDES),
-        'PS': math.ceil((DUREE_POST_SEVRAGE + VIDE_SANITAIRE) / INTERVALLE_BANDES),
-        'E': math.ceil((DUREE_ENGRAISSEMENT + VIDE_SANITAIRE) / INTERVALLE_BANDES)
+        'AS': nb_salles_as,
+        'G': nb_salles_g,
+        'M': nb_salles_m,
+        'PS': nb_salles_ps,
+        'E': nb_salles_e
     }
     
-    st.info(f"🧹 **Vide sanitaire actuel : {VIDE_SANITAIRE} jours**\n\n"
-            f"Modifiez ce paramètre pour voir l'impact sur le dimensionnement.")
+    durees_optimales = {
+        'AS': duree_as_finale,
+        'G': duree_g_finale,
+        'M': duree_m_finale,
+        'PS': duree_ps_finale,
+        'E': duree_e_finale
+    }
     
-    # Nombre de salles
-    st.subheader("🏠 Nombre de salles")
-    NB_SALLES_ATTENTE = st.number_input("Attente Saillie", value=nb_optimal['AS'], min_value=1)
-    NB_SALLES_GESTANTE = st.number_input("Gestante", value=nb_optimal['G'], min_value=1)
-    NB_SALLES_MATERNITE = st.number_input("Maternité", value=nb_optimal['M'], min_value=1)
-    NB_SALLES_PS = st.number_input("Post-Sevrage", value=nb_optimal['PS'], min_value=1)
-    NB_SALLES_ENGRAISSEMENT = st.number_input("Engraissement", value=nb_optimal['E'], min_value=1)
+    vides_reels = {
+        'AS': vide_as,
+        'G': vide_g,
+        'M': vide_m,
+        'PS': vide_ps,
+        'E': vide_e
+    }
+    
+    
+    
+    # Totaux et validations
+    st.markdown("---")
+    
+    # Réduire la taille de police des metrics
+    st.markdown("""
+        <style>
+        [data-testid="stMetricValue"] {
+            font-size: 20px;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 14px;
+        }
+        [data-testid="stMetricDelta"] {
+            font-size: 12px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    col_info1, col_info2, col_info3 = st.columns(3)
+    with col_info1:
+        total_salles = sum(nb_optimal.values())
+        st.metric("**Salles**", f"{total_salles}", help="Nombre total de salles nécessaires")
+    
+    with col_info2:
+        cycle_truies = durees_optimales['AS'] + durees_optimales['G'] + durees_optimales['M']
+        delta_cycle = cycle_truies - 147
+        if abs(delta_cycle) < 0.5:
+            st.metric("**LCY**", f"{cycle_truies:.0f}j", delta="✅ Conforme", delta_color="normal", help="Longueur du cycle truies")
+        else:
+            st.metric("**LCY**", f"{cycle_truies:.0f}j", delta=f"{delta_cycle:+.0f}j", delta_color="inverse", help="Longueur du cycle truies")
+    
+    with col_info3:
+        circuit_produits = durees_optimales['PS'] + durees_optimales['E']
+        if circuit_produits <= 152:
+            st.metric("**Produits**", f"{circuit_produits:.0f}j", delta="✅ Conforme", delta_color="normal", help="Circuit produits")
+        else:
+            delta_produits = circuit_produits - 152
+            st.metric("**Produits**", f"{circuit_produits:.0f}j", delta=f"+{delta_produits:.0f}j", delta_color="inverse", help="Circuit produits")
+    
+    # Avertissements selon le contexte
+    nb_vides_hors_cible = sum(1 for v in vides_reels.values() if v < 3 or v > 7)
+    
+    if INTERVALLE_BANDES == 7:
+        st.info(f"""
+        💡 **Conduite 7 jours** ({NB_BANDES} bandes, {total_salles} salles) :
+        - Rotation très intensive nécessitant une organisation rigoureuse
+        - Les vides sanitaires peuvent être allongés (ajustez manuellement si besoin)
+        """)
+    
+    if nb_vides_hors_cible > 0:
+        st.warning(f"""
+        ⚠️ **{nb_vides_hors_cible} type(s) de salle avec vide hors cible (3-7j)**
+        
+        Vous pouvez :
+        - Ajuster manuellement dans la section ci-dessous
+        - Accepter ces vides (certains élevages fonctionnent ainsi)
+        - Changer l'intervalle entre bandes
+        """)
+    elif all(3 <= v <= 7 for v in vides_reels.values()):
+        st.success("🎯 **Configuration optimale** : Tous les vides sanitaires sont entre 3 et 7 jours !")
+    
+    st.markdown("---")
 
-# Convertir date en datetime pour les calculs
+    # ========================================================================
+    # SECTION 3 : AJUSTEMENTS MANUELS (OPTIONNEL)
+    # ========================================================================
+    
+    with st.expander("🔧 Ajustements manuels (optionnel)", expanded=False):
+        st.caption("Modifiez uniquement si vous avez des contraintes spécifiques")
+        
+        st.markdown("**Nombre de salles :**")
+        st.number_input("Attente Saillie", value=nb_optimal['AS'], min_value=1, key="nb_as")
+        st.number_input("Gestante", value=nb_optimal['G'], min_value=1, key="nb_g")
+        st.number_input("Maternité", value=nb_optimal['M'], min_value=1, key="nb_m")
+        st.number_input("Post-Sevrage", value=nb_optimal['PS'], min_value=1, key="nb_ps")
+        st.number_input("Engraissement", value=nb_optimal['E'], min_value=1, key="nb_e")
+        
+        st.markdown("---")
+        st.markdown("**Durées d'occupation (jours) :**")
+        
+        st.number_input("Jours avant saillie", value=5, min_value=0, key="jours_av")
+        st.number_input("Attente Saillie (durée)", value=int(durees_optimales['AS']), min_value=1, key="duree_as")
+        st.number_input("Gestante (durée)", value=int(durees_optimales['G']), min_value=1, key="duree_g")
+        st.number_input("Maternité (durée)", value=int(durees_optimales['M']), min_value=1, key="duree_m")
+        st.number_input("Post-Sevrage (durée)", value=int(durees_optimales['PS']), min_value=1, key="duree_ps")
+        st.number_input("Engraissement (durée)", value=int(durees_optimales['E']), min_value=1, key="duree_e")
+        
+        # Validation des ajustements manuels
+        if 'duree_as' in st.session_state:
+            cycle_manuel = st.session_state['duree_as'] + st.session_state['duree_g'] + st.session_state['duree_m']
+            if cycle_manuel != 147:
+                st.error(f"⚠️ Cycle truies = {cycle_manuel}j (doit être 147j)")
+            
+            circuit_manuel = st.session_state['duree_ps'] + st.session_state['duree_e']
+            if circuit_manuel > 152:
+                st.error(f"⚠️ Circuit produits = {circuit_manuel}j (> 152j)")
+            
+            # Vérifier les vides sanitaires
+            for nom, key_nb, key_duree in [
+                ("AS", 'nb_as', 'duree_as'),
+                ("G", 'nb_g', 'duree_g'),
+                ("M", 'nb_m', 'duree_m'),
+                ("PS", 'nb_ps', 'duree_ps'),
+                ("E", 'nb_e', 'duree_e')
+            ]:
+                if key_nb in st.session_state and key_duree in st.session_state:
+                    vide = (st.session_state[key_nb] * INTERVALLE_BANDES) - st.session_state[key_duree]
+                    if vide < 3:
+                        st.error(f"⚠️ {nom}: Vide = {int(vide)}j (< 3j minimum !)")
+                    elif vide > 7:
+                        st.warning(f"⚠️ {nom}: Vide = {int(vide)}j (> 7j)")
+    
+    # ========================================================================
+    # RÉCUPÉRATION DES VALEURS avec clés dynamiques
+    # ========================================================================
+    
+    # Nombre de salles : utiliser session_state avec clés dynamiques
+    NB_SALLES_ATTENTE = st.session_state.get(f'nb_as{suffixe_config}', nb_optimal['AS'])
+    NB_SALLES_GESTANTE = st.session_state.get(f'nb_g{suffixe_config}', nb_optimal['G'])
+    NB_SALLES_MATERNITE = st.session_state.get(f'nb_m{suffixe_config}', nb_optimal['M'])
+    NB_SALLES_PS = st.session_state.get(f'nb_ps{suffixe_config}', nb_optimal['PS'])
+    NB_SALLES_ENGRAISSEMENT = st.session_state.get(f'nb_e{suffixe_config}', nb_optimal['E'])
+    
+    # Durées : utiliser session_state avec clés dynamiques
+    JOURS_AVANT_SAILLIE = st.session_state.get(f'jours_av{suffixe_config}', 5)
+    DUREE_ATTENTE_SAILLIE = st.session_state.get(f'duree_as{suffixe_config}', int(durees_optimales['AS']))
+    DUREE_GESTANTE = st.session_state.get(f'duree_g{suffixe_config}', int(durees_optimales['G']))
+    DUREE_MATERNITE = st.session_state.get(f'duree_m{suffixe_config}', int(durees_optimales['M']))
+    DUREE_POST_SEVRAGE = st.session_state.get(f'duree_ps{suffixe_config}', int(durees_optimales['PS']))
+    DUREE_ENGRAISSEMENT = st.session_state.get(f'duree_e{suffixe_config}', int(durees_optimales['E']))
+# Convertir date en datetime
 DATE_SAILLIE_B1 = datetime.combine(DATE_SAILLIE_B1, datetime.min.time())
-
+CYCLE_TRUIE_ATTENDU = 147
 # ============================================================================
 # SECTION 2 : CALCUL DES DATES ET OCCUPATIONS
 # ============================================================================
@@ -547,6 +734,13 @@ with st.spinner("Calcul des occupations..."):
 
 etat_salles, conflits, sur_dim, dates_regime = affecter_salles_simple(toutes_occupations)
 
+with st.spinner("Calcul des occupations..."):
+    toutes_occupations_truies = calculer_toutes_occupations_truies()
+    toutes_occupations_produits = calculer_toutes_occupations_produits()
+    toutes_occupations = toutes_occupations_truies + toutes_occupations_produits
+
+etat_salles, conflits, sur_dim, dates_regime = affecter_salles_simple(toutes_occupations)
+
 with st.expander("📊 Diagnostic de la configuration", expanded=True):
     col1, col2, col3 = st.columns(3)
     
@@ -585,21 +779,67 @@ with st.expander("📊 Diagnostic de la configuration", expanded=True):
         else:
             st.info("Toutes occupées")
     
-    # Afficher les dates de régime de croisière
-    if dates_regime:
-        st.markdown("---")
-        st.markdown("**📅 Dates de régime de croisière** (toutes salles utilisées au moins 1x) :")
-        cols_regime = st.columns(5)
-        types_salles = ['Attente Saillie', 'Gestante', 'Maternité', 'Post-Sevrage', 'Engraissement']
-        for idx, type_salle in enumerate(types_salles):
-            with cols_regime[idx]:
-                if type_salle in dates_regime:
-                    st.caption(f"**{type_salle}**")
-                    st.write(dates_regime[type_salle].strftime('%d/%m/%Y'))
-                else:
-                    st.caption(f"**{type_salle}**")
-                    st.write("🔄 Démarrage...")
-
+    # ========================================================================
+    # AFFICHAGE AVEC DIAGNOSTIC (Version améliorée)
+    # ========================================================================
+    
+    # st.success("**📊 Dimensionnement calculé**")
+    
+    # Préparer les données pour le tableau
+    donnees_truies = []
+    donnees_produits = []
+    
+    noms_types = {
+        'AS': 'Attente Saillie',
+        'G': 'Gestante',
+        'M': 'Maternité',
+        'PS': 'Post-Sevrage',
+        'E': 'Engraissement'
+    }
+    
+    contraintes = {
+        'AS': '🔒 35j fixe',
+        'G': '🔄 Variable',
+        'M': '🟡 32-35j',
+        'PS': '🔒 42j fixe',
+        'E': '🔄 Variable'
+    }
+    
+    for code in ['AS', 'G', 'M', 'PS', 'E']:
+        vide = int(vides_reels[code])
+        
+        # Diagnostic du vide
+        if vide < 3:
+            statut = "❌ Trop court"
+        elif 3 <= vide <= 7:
+            statut = "✅ Optimal"
+        elif 7 < vide <= 14:
+            statut = "⚠️ Long"
+        else:
+            statut = "🔴 Très long"
+        
+        ligne = {
+            'Type': noms_types[code],
+            'Contrainte': contraintes[code],
+            'Salles': nb_optimal[code],
+            'Durée': f"{int(durees_optimales[code])}j",
+            'Vide': f"{vide}j",
+            'Statut': statut
+        }
+        
+        if code in ['AS', 'G', 'M']:
+            donnees_truies.append(ligne)
+        else:
+            donnees_produits.append(ligne)
+    
+    # Afficher les tableaux
+    st.markdown("**🐖 Circuit Truies**")
+    df_truies = pd.DataFrame(donnees_truies)
+    st.dataframe(df_truies, use_container_width=True, hide_index=True)
+    
+    st.markdown("**🐷 Circuit Produits**")
+    df_produits = pd.DataFrame(donnees_produits)
+    st.dataframe(df_produits, use_container_width=True, hide_index=True)
 st.markdown("---")
 
 # Affichage Circuit Truies
