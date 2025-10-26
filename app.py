@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Gestion Salles Élevage Porcin", layout="wide")
 
-st.title("🐷 Gestion des bandes en élevage Porcin")
+# st.title("🐷 Gestion des bandes en élevage Porcin")
 
 
 with st.sidebar:
@@ -49,6 +49,28 @@ with st.sidebar:
         value=datetime(2025, 7, 25),
         help="Point de référence temporel pour la simulation"
     )
+    
+    # Initialiser la date de simulation dans session_state si nécessaire
+    if 'date_simulation' not in st.session_state:
+        st.session_state.date_simulation = datetime.now().date()
+    
+    # Date de simulation
+    DATE_SIMULATION = st.date_input(
+        "📅 Date de simulation",
+        value=st.session_state.date_simulation,
+        min_value=DATE_SAILLIE_B1,
+        help="Choisissez une date pour voir l'état des salles à ce moment précis",
+        key='date_simulation'
+    )
+    
+    # Bouton de réinitialisation
+    if st.button("🔄 Réinitialiser tous les paramètres", use_container_width=True, type="secondary"):
+        # Supprimer toutes les clés de session_state
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        # Réinitialiser la date à aujourd'hui
+        st.session_state.date_simulation = datetime.now().date()
+        st.rerun()
     
     st.markdown("---")
     # ========================================================================
@@ -287,9 +309,86 @@ with st.sidebar:
     DUREE_MATERNITE = st.session_state.get(f'duree_m{suffixe_config}', int(durees_optimales['M']))
     DUREE_POST_SEVRAGE = st.session_state.get(f'duree_ps{suffixe_config}', int(durees_optimales['PS']))
     DUREE_ENGRAISSEMENT = st.session_state.get(f'duree_e{suffixe_config}', int(durees_optimales['E']))
-# Convertir date en datetime
+# Convertir dates en datetime
 DATE_SAILLIE_B1 = datetime.combine(DATE_SAILLIE_B1, datetime.min.time())
+DATE_SIMULATION = datetime.combine(DATE_SIMULATION, datetime.min.time())
 CYCLE_TRUIE_ATTENDU = 147
+
+st.title("🐷 Simulateur de Gestion des Salles - Élevage Porcin")
+
+# Variable pour l'ensemble de l'application
+date_actuelle = DATE_SIMULATION
+
+# ============================================================================
+# FONCTION DE CALCUL D'ÉTAT À UNE DATE DONNÉE
+# ============================================================================
+
+def calculer_etat_salle_a_date(salle_id, df_bandes, date_simulation, vide_sanitaire):
+    """
+    Calcule l'état d'une salle à une date donnée.
+    
+    Returns:
+        dict avec 'statut', 'bande', 'progression', 'jours_restants', 'date_liberation'
+    """
+    # Filtrer les occupations de cette salle
+    occupations = df_bandes[df_bandes['salle_affectee'] == salle_id].copy()
+    
+    if occupations.empty:
+        return {
+            'statut': 'disponible',
+            'bande': None,
+            'progression': 0,
+            'jours_restants': 0,
+            'date_liberation': None
+        }
+    
+    # Parcourir les périodes d'occupation
+    for idx, row in occupations.iterrows():
+        date_entree = row['date_entree']
+        date_sortie = row['date_sortie']
+        date_fin_vide = date_sortie + timedelta(days=vide_sanitaire)
+        
+        # CAS 1 : Salle occupée
+        if date_entree <= date_simulation < date_sortie:
+            duree_totale = (date_sortie - date_entree).days
+            jours_ecoules = (date_simulation - date_entree).days
+            progression = (jours_ecoules / duree_totale * 100) if duree_totale > 0 else 0
+            jours_restants = (date_sortie - date_simulation).days
+            
+            return {
+                'statut': 'occupee',
+                'bande': row['bande'],
+                'progression': progression,
+                'jours_restants': jours_restants,
+                'date_liberation': date_fin_vide
+            }
+        
+        # CAS 2 : Salle en vide sanitaire
+        elif date_sortie <= date_simulation < date_fin_vide:
+            jours_vide_ecoules = (date_simulation - date_sortie).days
+            progression_vide = (jours_vide_ecoules / vide_sanitaire * 100) if vide_sanitaire > 0 else 100
+            jours_restants = (date_fin_vide - date_simulation).days
+            
+            return {
+                'statut': 'vide',
+                'bande': row['bande'],
+                'progression': progression_vide,
+                'jours_restants': jours_restants,
+                'date_liberation': date_fin_vide
+            }
+    
+    # CAS 3 : Salle disponible (toutes les occupations sont terminées)
+    return {
+        'statut': 'disponible',
+        'bande': None,
+        'progression': 0,
+        'jours_restants': 0,
+        'date_liberation': None
+    }
+
+# ============================================================================
+# GÉNÉRATION DES DONNÉES
+# ============================================================================
 # ============================================================================
 # SECTION 2 : CALCUL DES DATES ET OCCUPATIONS
 # ============================================================================
@@ -418,7 +517,7 @@ def calculer_toutes_occupations_produits():
 
 def affecter_salles_simple(toutes_occupations):
     """Affectation simple : chaque bande prend LA salle vide avec respect du vide sanitaire de 7j"""
-    date_actuelle = datetime.now()
+    date_actuelle = DATE_SIMULATION
     
     salles_config = {
         'Attente Saillie': NB_SALLES_ATTENTE,
@@ -581,7 +680,7 @@ def affecter_salles_simple(toutes_occupations):
 # SECTION 4 : VISUALISATION
 # ============================================================================
 
-def creer_jauge_salle(etat_salle, num_salle, type_salle):
+def creer_jauge_salle(etat_salle, num_salle, type_salle, date_simulation):
     """Crée une jauge pour une salle"""
     
     if etat_salle['statut'] == 'occupée':
@@ -622,6 +721,18 @@ def creer_jauge_salle(etat_salle, num_salle, type_salle):
             font={'family': "Arial"}
         )
         
+        # Ajouter date DANS la jauge si simulation
+        if date_simulation.date() != datetime.now().date():
+            fig.add_annotation(
+                text=f"{date_simulation.strftime('%d/%m/%Y')}",
+                xref="paper", yref="paper",
+                x=0.5, y=0.55,
+                showarrow=False,
+                font=dict(size=11, color="#666"),
+                bgcolor="white",
+                opacity=0.9
+            )
+        
     elif etat_salle['statut'] == 'vide_sanitaire':
         jours_ecoules = etat_salle['jours_vide_ecoules']
         jours_restants = etat_salle['jours_vide_restants']
@@ -658,6 +769,18 @@ def creer_jauge_salle(etat_salle, num_salle, type_salle):
             paper_bgcolor='white',
             font={'family': "Arial"}
         )
+        
+        # Ajouter date DANS la jauge si simulation
+        if date_simulation.date() != datetime.now().date():
+            fig.add_annotation(
+                text=f"{date_simulation.strftime('%d/%m/%Y')}",
+                xref="paper", yref="paper",
+                x=0.5, y=0.55,
+                showarrow=False,
+                font=dict(size=11, color="#666"),
+                bgcolor="white",
+                opacity=0.9
+            )
     
     elif etat_salle['statut'] == 'disponible':
         jours_dispo = etat_salle['jours_disponible']
@@ -680,6 +803,18 @@ def creer_jauge_salle(etat_salle, num_salle, type_salle):
             font={'family': "Arial"}
         )
         
+        # Ajouter date DANS la jauge si simulation
+        if date_simulation.date() != datetime.now().date():
+            fig.add_annotation(
+                text=f"{date_simulation.strftime('%d/%m/%Y')}",
+                xref="paper", yref="paper",
+                x=0.5, y=0.45,
+                showarrow=False,
+                font=dict(size=11, color="#666"),
+                bgcolor="white",
+                opacity=0.9
+            )
+        
     else:
         return None
     
@@ -692,7 +827,7 @@ def afficher_jauges_par_deux(etats_salles, type_salle, prefix):
         
         with cols[0]:
             etat = etats_salles[i]
-            fig = creer_jauge_salle(etat, i+1, type_salle)
+            fig = creer_jauge_salle(etat, i+1, type_salle, DATE_SIMULATION)
             if fig:
                 st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_{i}")
             else:
@@ -701,7 +836,7 @@ def afficher_jauges_par_deux(etats_salles, type_salle, prefix):
         if i + 1 < len(etats_salles):
             with cols[1]:
                 etat = etats_salles[i+1]
-                fig = creer_jauge_salle(etat, i+2, type_salle)
+                fig = creer_jauge_salle(etat, i+2, type_salle, DATE_SIMULATION)
                 if fig:
                     st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_{i+1}")
                 else:
@@ -714,7 +849,7 @@ def afficher_jauges_par_trois(etats_salles, type_salle, prefix):
     for i in range(len(etats_salles)):
         with cols[i % 3]:
             etat = etats_salles[i]
-            fig = creer_jauge_salle(etat, i+1, type_salle)
+            fig = creer_jauge_salle(etat, i+1, type_salle, DATE_SIMULATION)
             if fig:
                 st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_{i}")
             else:
@@ -724,7 +859,7 @@ def afficher_jauges_par_trois(etats_salles, type_salle, prefix):
 # SECTION 5 : INTERFACE PRINCIPALE
 # ============================================================================
 
-date_actuelle = datetime.now()
+date_actuelle = DATE_SIMULATION
 st.info(f"📅 **Date actuelle** : {date_actuelle.strftime('%d/%m/%Y %H:%M')}")
 
 with st.spinner("Calcul des occupations..."):
@@ -891,4 +1026,3 @@ with col1:
         with cols[i]:
             couleur = COULEURS_BANDES[i % len(COULEURS_BANDES)]
             st.markdown(f"<div style='background-color:{couleur}; padding:15px; text-align:center; color:white; font-weight:bold; border-radius:10px; margin:4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>Bande {i+1}</div>", unsafe_allow_html=True)
-
