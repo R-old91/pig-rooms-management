@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Gestion Salles Élevage Porcin", layout="wide")
 
-# st.title("🐷 Gestion des bandes en élevage Porcin")
+
 
 
 with st.sidebar:
@@ -227,35 +227,25 @@ with st.sidebar:
     # ========================================================================
     
     with st.expander("🔧 Ajustements manuels (optionnel)", expanded=False):
-        st.caption("Modifiez les durées d'occupation pour ajuster votre conduite")
+        st.caption("Modifiez les durées d'occupation et le nombre de salles pour ajuster votre conduite")
         
         st.markdown("**Durées d'occupation (jours) :**")
         
-        temp_jours_av = st.number_input("Jours avant saillie", value=st.session_state.get('jours_av_applique', 5), min_value=0, key="temp_jours_av")
-        temp_duree_as = st.number_input("Attente Saillie (durée)", value=st.session_state.get('duree_as_applique', int(durees_optimales['AS'])), min_value=1, key="temp_duree_as")
-        temp_duree_g = st.number_input("Gestante (durée)", value=st.session_state.get('duree_g_applique', int(durees_optimales['G'])), min_value=1, key="temp_duree_g")
-        temp_duree_m = st.number_input("Maternité (durée)", value=st.session_state.get('duree_m_applique', int(durees_optimales['M'])), min_value=1, key="temp_duree_m")
-        temp_duree_ps = st.number_input("Post-Sevrage (durée)", value=st.session_state.get('duree_ps_applique', int(durees_optimales['PS'])), min_value=1, key="temp_duree_ps")
-        temp_duree_e = st.number_input("Engraissement (durée)", value=st.session_state.get('duree_e_applique', int(durees_optimales['E'])), min_value=1, key="temp_duree_e")
+        temp_jours_av = st.number_input("Jours avant saillie", value=st.session_state.get('jours_av_applique', 5), min_value=0, step=1, key="temp_jours_av")
+        temp_duree_as = st.number_input("Attente Saillie (durée)", value=st.session_state.get('duree_as_applique', int(durees_optimales['AS'])), min_value=1, step=1, key="temp_duree_as")
+        temp_duree_g = st.number_input("Gestante (durée)", value=st.session_state.get('duree_g_applique', int(durees_optimales['G'])), min_value=1, step=1, key="temp_duree_g")
+        temp_duree_m = st.number_input("Maternité (durée)", value=st.session_state.get('duree_m_applique', int(durees_optimales['M'])), min_value=1, step=1, key="temp_duree_m")
+        temp_duree_ps = st.number_input("Post-Sevrage (durée)", value=st.session_state.get('duree_ps_applique', int(durees_optimales['PS'])), min_value=1, step=1, key="temp_duree_ps")
+        temp_duree_e = st.number_input("Engraissement (durée)", value=st.session_state.get('duree_e_applique', int(durees_optimales['E'])), min_value=1, step=1, key="temp_duree_e")
         
         st.markdown("---")
+        st.markdown("**Nombre de salles :**")
         
-        # Validation en temps réel
-        cycle_manuel = temp_duree_as + temp_duree_g + temp_duree_m
-        circuit_manuel = temp_duree_ps + temp_duree_e
-        
-        col_val1, col_val2 = st.columns(2)
-        with col_val1:
-            if cycle_manuel != 147:
-                st.error(f"⚠️ Cycle truies = {cycle_manuel}j (doit être 147j)")
-            else:
-                st.success(f"✅ Cycle truies = {cycle_manuel}j")
-        
-        with col_val2:
-            if circuit_manuel > 152:
-                st.error(f"⚠️ Circuit produits = {circuit_manuel}j (> 152j)")
-            else:
-                st.success(f"✅ Circuit produits = {circuit_manuel}j")
+        temp_nb_as = st.number_input("Attente Saillie", value=st.session_state.get('nb_as_applique', nb_optimal['AS']), min_value=1, max_value=20, step=1, key="temp_nb_as")
+        temp_nb_g = st.number_input("Gestante", value=st.session_state.get('nb_g_applique', nb_optimal['G']), min_value=1, max_value=20, step=1, key="temp_nb_g")
+        temp_nb_m = st.number_input("Maternité", value=st.session_state.get('nb_m_applique', nb_optimal['M']), min_value=1, max_value=20, step=1, key="temp_nb_m")
+        temp_nb_ps = st.number_input("Post-Sevrage", value=st.session_state.get('nb_ps_applique', nb_optimal['PS']), min_value=1, max_value=20, step=1, key="temp_nb_ps")
+        temp_nb_e = st.number_input("Engraissement", value=st.session_state.get('nb_e_applique', nb_optimal['E']), min_value=1, max_value=20, step=1, key="temp_nb_e")
         
         st.markdown("---")
         
@@ -270,6 +260,12 @@ with st.sidebar:
                 st.session_state['duree_m_applique'] = temp_duree_m
                 st.session_state['duree_ps_applique'] = temp_duree_ps
                 st.session_state['duree_e_applique'] = temp_duree_e
+                # Salles
+                st.session_state['nb_as_applique'] = temp_nb_as
+                st.session_state['nb_g_applique'] = temp_nb_g
+                st.session_state['nb_m_applique'] = temp_nb_m
+                st.session_state['nb_ps_applique'] = temp_nb_ps
+                st.session_state['nb_e_applique'] = temp_nb_e
                 st.success("✅ Modifications appliquées !")
                 st.rerun()
         
@@ -277,7 +273,9 @@ with st.sidebar:
             if st.button("↩️ Rétablir valeurs optimales", type="secondary", use_container_width=True):
                 # Supprimer les valeurs appliquées pour revenir aux optimales
                 for key in ['jours_av_applique', 'duree_as_applique', 'duree_g_applique', 
-                           'duree_m_applique', 'duree_ps_applique', 'duree_e_applique']:
+                           'duree_m_applique', 'duree_ps_applique', 'duree_e_applique',
+                           'nb_as_applique', 'nb_g_applique', 'nb_m_applique', 
+                           'nb_ps_applique', 'nb_e_applique']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -286,12 +284,21 @@ with st.sidebar:
     # RÉCUPÉRATION DES VALEURS avec clés dynamiques
     # ========================================================================
     
-    # Nombre de salles : toujours utiliser les valeurs optimales calculées
-    NB_SALLES_ATTENTE = nb_optimal['AS']
-    NB_SALLES_GESTANTE = nb_optimal['G']
-    NB_SALLES_MATERNITE = nb_optimal['M']
-    NB_SALLES_PS = nb_optimal['PS']
-    NB_SALLES_ENGRAISSEMENT = nb_optimal['E']
+    # Nombre de salles : utiliser les ajustements manuels s'ils sont appliqués, sinon valeurs optimales
+    NB_SALLES_ATTENTE = st.session_state.get('nb_as_applique', nb_optimal['AS'])
+    NB_SALLES_GESTANTE = st.session_state.get('nb_g_applique', nb_optimal['G'])
+    NB_SALLES_MATERNITE = st.session_state.get('nb_m_applique', nb_optimal['M'])
+    NB_SALLES_PS = st.session_state.get('nb_ps_applique', nb_optimal['PS'])
+    NB_SALLES_ENGRAISSEMENT = st.session_state.get('nb_e_applique', nb_optimal['E'])
+    
+    # Créer un dictionnaire pour faciliter l'accès
+    nb_salles_reelles = {
+        'AS': NB_SALLES_ATTENTE,
+        'G': NB_SALLES_GESTANTE,
+        'M': NB_SALLES_MATERNITE,
+        'PS': NB_SALLES_PS,
+        'E': NB_SALLES_ENGRAISSEMENT
+    }
     
     # Durées : utiliser les ajustements manuels s'ils sont appliqués, sinon valeurs optimales
     JOURS_AVANT_SAILLIE = st.session_state.get('jours_av_applique', 5)
@@ -306,7 +313,7 @@ with st.sidebar:
     
     col_info1, col_info2, col_info3 = st.columns(3)
     with col_info1:
-        total_salles = sum(nb_optimal.values())
+        total_salles = sum(nb_salles_reelles.values())
         st.metric("**Salles**", f"{total_salles}", help="Nombre total de salles nécessaires")
     
     with col_info2:
@@ -964,31 +971,36 @@ with st.expander("📊 Diagnostic de la configuration", expanded=True):
         'E': DUREE_ENGRAISSEMENT
     }
     
-    # Recalculer les vides sanitaires en fonction des durées réelles
+    # Recalculer les vides sanitaires en fonction des durées ET nombre de salles réels
     vides_reels_ajustes = {}
     for code in ['AS', 'G', 'M', 'PS', 'E']:
-        vides_reels_ajustes[code] = (nb_optimal[code] * INTERVALLE_BANDES) - durees_reelles[code]
+        vides_reels_ajustes[code] = (nb_salles_reelles[code] * INTERVALLE_BANDES) - durees_reelles[code]
     
     for code in ['AS', 'G', 'M', 'PS', 'E']:
-        vide = int(vides_reels_ajustes[code])
+        vide = vides_reels_ajustes[code]
         
         # Diagnostic du vide
         if vide < 3:
-            statut = "❌ Trop court"
+            statut = "🔴 Trop court"
+            suggestion = "➕ Augmenter salles"
         elif 3 <= vide <= 7:
-            statut = "✅ Optimal"
+            statut = "🟢 Optimal"
+            suggestion = "-"
         elif 7 < vide <= 14:
-            statut = "⚠️ Long"
+            statut = "🟡 Long"
+            suggestion = "➖ Réduire salles"
         else:
             statut = "🔴 Très long"
+            suggestion = "⬇️ Réduire salles"
         
         ligne = {
             'Type': noms_types[code],
             'Contrainte': contraintes[code],
-            'Salles': nb_optimal[code],
+            'Salles': nb_salles_reelles[code],
             'Durée': f"{int(durees_reelles[code])}j",
-            'Vide': f"{vide}j",
-            'Statut': statut
+            'Vide': f"{int(vide)}j",
+            'Statut': statut,
+            'Suggestion': suggestion
         }
         
         if code in ['AS', 'G', 'M']:
